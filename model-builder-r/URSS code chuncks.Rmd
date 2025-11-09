@@ -1,0 +1,600 @@
+---
+title: "URSS - R markdown EDA"
+author: "Benjamin Gay"
+date: "2025-07-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cleaning up the dataset
+
+```{r}
+# Load libraries
+library(tibble)
+library(dplyr)
+library(tidyr)
+
+# Load and prepare data
+mps_2024 <- read.delim("https://www.publicwhip.org.uk/data/votematrix-2024.txt", skip = 19)
+vm_2024  <- read.delim("https://www.publicwhip.org.uk/data/votematrix-2024.dat")
+
+vm_2024 <- transform(vm_2024, date = as.Date(date))
+
+# Reshape vote matrix to long format
+vote_data_long_2024 <- vm_2024 %>%
+  pivot_longer(
+    cols = starts_with("mpid"),
+    names_to = "mpid",
+    values_to = "vote_code"
+  ) %>%
+  mutate(mpid = as.integer(sub("mpid", "", mpid)))  # Extract numeric mpid
+
+colnames(mps_2024)[1] <- "mpid"
+
+# Merge vote data with MP metadata
+vote_data_long_2024 <- vote_data_long_2024 %>%
+  left_join(mps_2024, by = "mpid")
+
+# Clean vote data
+vote_data_clean_2024 <- vote_data_long_2024 %>%
+  filter(!vote_code %in% c(-9, 3)) %>%                    
+  filter(!grepl("\\[Lords\\]", Bill)) %>%                 
+  mutate(
+    vote_code = case_when(                           
+      vote_code == 1 ~ 2,   # tellaye → aye
+      vote_code == 5 ~ 4,   # tellno  → no
+      TRUE ~ vote_code
+    ),
+    vote_label = case_when(                               
+      vote_code == 2 ~ "Aye",
+      vote_code == 4 ~ "No",
+      TRUE ~ NA_character_
+    ),
+    mp_unique_id = paste(firstname, surname, mpid, sep = "_")  
+  )
+
+# Prepare IRT matrix
+
+vote_data_dedup_2024 <- vote_data_clean_2024 %>%
+  distinct(mpid, voteno, .keep_all = TRUE)
+
+# Add binary vote
+vote_data_dedup_2024 <- vote_data_dedup_2024 %>%
+  mutate(vote_binary = ifelse(vote_code == 2, 1, 0))
+
+irt_matrix_2024 <- vote_data_dedup_2024 %>%
+  dplyr::select(mp_unique_id, party, voteno, vote_binary) %>%
+  pivot_wider(names_from = voteno, values_from = vote_binary)
+
+# Move party to a separate column and set rownames
+irt_matrix_2024 <- irt_matrix_2024 %>%
+  relocate(party, .after = mp_unique_id) %>%                 
+  column_to_rownames("mp_unique_id")                         
+
+print(dim(irt_matrix_2024))
+head(irt_matrix_2024[, 1:10])
+
+
+```
+
+## Creating a function to comapre the agreement rate to a given MP
+
+```{r}
+library(ggplot2)
+
+plot_mp_agreement_2024 <- function(mp_id, irt_matrix_2024) {
+  # Check if MP exists
+  if (!(mp_id %in% rownames(irt_matrix_2024))) {
+    stop("MP not found in the dataset.")
+  }
+  
+  vote_cols <- which(sapply(irt_matrix_2024, is.numeric))
+  
+  # Extract target MP votes
+  target_votes <- unlist(irt_matrix_2024[mp_id, vote_cols])
+  
+  # Compute agreement rates
+  comparison_df <- irt_matrix_2024 %>%
+    rownames_to_column("mp_id") %>%
+    filter(mp_id != !!mp_id) %>%
+    rowwise() %>%
+    mutate(
+      agreement = sum(
+        !is.na(c_across(all_of(names(target_votes)))) &
+          !is.na(target_votes) &
+          c_across(all_of(names(target_votes))) == target_votes,
+        na.rm = TRUE
+      ),
+      total_overlap = sum(
+        !is.na(c_across(all_of(names(target_votes)))) & !is.na(target_votes),
+        na.rm = TRUE
+      ),
+      agreement_rate = ifelse(total_overlap > 0, agreement / total_overlap, NA_real_)
+    ) %>%
+    ungroup()
+  
+  # Return data frame
+  agreement_data <- comparison_df %>%
+    dplyr::select(mp_id, party, agreement_rate) %>%
+    arrange(desc(agreement_rate))
+  
+  # Plot agreement rates
+  plot <- ggplot(agreement_data, aes(x = reorder(mp_id, agreement_rate), y = agreement_rate, color = party)) +
+    geom_point(alpha = 0.7) +
+    coord_flip() +
+    labs(
+      title = paste("Vote Agreement Rates with", mp_id),
+      x = "MP",
+      y = "Agreement Rate",
+      color = "Party"
+    ) +
+    theme_minimal() +
+    theme(axis.text.y = element_blank(),  # Hide MP labels on y-axis for clarity
+          axis.ticks.y = element_blank())
+  
+  print(plot)
+  
+  return(agreement_data)
+}
+
+# Example usage:
+results_2024 <- plot_mp_agreement_2024("Bridget_Phillipson_42782", irt_matrix_2024)
+head(results_2024)
+
+```
+
+## Creating my first IRT model
+
+```{r}
+
+nadia_votes_2024 <- vote_data_long_2024 %>%
+  dplyr::filter(firstname == "Nadia", surname == "Whittome") %>%
+  dplyr::select(voteno, nadia_vote_code = vote_code)
+
+
+vote_compare_2024 <- vote_data_long_2024 %>%
+  left_join(nadia_votes_2024, by = "voteno")
+
+# Create binary agreement variable
+vote_compare_2024 <- vote_compare_2024 %>%
+  mutate(
+    agreement = ifelse(vote_code == nadia_vote_code, 1, 0)
+  )
+
+
+vote_compare_2024 <- vote_compare_2024 %>%
+  mutate(mp_unique_id = paste(firstname, surname, mpid, sep = "_"))
+
+# Build agreement matrix
+agreement_matrix_2024 <- vote_compare_2024 %>%
+  dplyr::select(mp_unique_id, voteno, agreement) %>%
+  distinct() %>%
+  tidyr::pivot_wider(names_from = voteno, values_from = agreement)
+
+```
+
+```{r}
+
+library(ltm)
+
+# Clean agreement matrix
+agreement_matrix_clean_2024 <- agreement_matrix_2024 %>%
+  column_to_rownames("mp_unique_id") %>%
+  as.matrix() %>%
+  .[rowSums(is.na(.)) < ncol(.) * 0.5, ]  # Keep MPs with <50% missing data
+
+agreement_matrix_clean_2024 <- agreement_matrix_clean_2024[, colSums(is.na(agreement_matrix_clean_2024)) < nrow(agreement_matrix_clean_2024) * 0.5]
+
+# Convert to data frame for ltm
+irt_data_2024 <- as.data.frame(agreement_matrix_clean_2024)
+
+# Fit 2PL IRT model to 2024 agreement data
+irt_model_2024 <- ltm(irt_data_2024 ~ z1, IRT.param = TRUE)
+
+
+summary(irt_model_2024)
+
+plot(irt_model_2024, type = "ICC")
+
+
+```
+
+### Visualising IRT model
+
+```{r}
+
+# Extract MP scores from IRT model
+mp_scores_2024 <- factor.scores(irt_model_2024, resp.patterns = irt_data_2024)
+
+# The scores are in mp_scores$score.dat, with rownames = MP IDs from irt_data
+mp_scores_full_2024 <- mp_scores_2024$score.dat %>%
+  tibble::rownames_to_column("mp_unique_id") %>%
+  dplyr::select(mp_unique_id, ideology_score = z1)
+
+# Prepare metadata for joining
+mp_metadata_2024 <- vote_compare_2024 %>%
+  distinct(mp_unique_id, firstname, surname, party) %>%
+  mutate(
+    MPName = paste(firstname, surname),
+    Party = party
+  ) %>%
+  dplyr::select(mp_unique_id, MPName, Party)
+
+# Join scores and metadata
+mp_scores_full_2024 <- mp_scores_full_2024 %>%
+  left_join(mp_metadata_2024, by = "mp_unique_id") %>%
+  arrange(ideology_score) %>%
+  mutate(
+    MPName_factor = factor(mp_unique_id, levels = mp_unique_id)
+  )
+
+# Define custom party colours
+party_colours <- c(
+  "Lab" = "#E4003B",          
+  "Labour" = "#E4003B",
+  "Con" = "#0087DC",           
+  "Conservative" = "#0087DC",
+  "LDem" = "#FAA61A",             
+  "Liberal Democrat" = "#FAA61A",
+  "Liberal Democrats" = "#FAA61A",
+  "SNP" = "#FFF95D",            
+  "Green" = "#6AB023",           
+  "Green Party" = "#6AB023",
+  "Plaid Cymru" = "#005E2F",    
+  "Reform UK" = "#12B6CF",      
+  "Independent" = "#999999",    
+  "Other" = "#999999"            
+)
+
+
+# Plot ideology scores
+ggplot(mp_scores_full_2024, aes(x = ideology_score, y = MPName_factor, color = Party)) +
+  geom_point() +
+  theme_minimal() +
+  labs(
+    title = "MP Ideological Scores Based on Voting Alignment with Nadia Whittome (2024)",
+    x = "Ideology Score (θ)",
+    y = NULL
+  ) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.position = "bottom"
+  ) +
+  scale_color_manual(values = party_colours)
+
+
+```
+
+
+# 2019 parliament records
+```{r}
+# Load required libraries
+library(tibble)
+library(dplyr)
+library(tidyr)
+
+# Load and prepare data
+# Load MP metadata and vote matrix
+mps24 <- read.delim("https://www.publicwhip.org.uk/data/votematrix-2019.txt", skip = 19)
+vm24  <- read.delim("https://www.publicwhip.org.uk/data/votematrix-2019.dat")
+
+# Convert date column to Date format
+vm24 <- transform(vm24, date = as.Date(date))
+
+# Reshape vote matrix
+vote_data_long <- vm24 %>%
+  pivot_longer(
+    cols = starts_with("mpid"),
+    names_to = "mpid",
+    values_to = "vote_code"
+  ) %>%
+  mutate(mpid = as.integer(sub("mpid", "", mpid)))  # Extract numeric mpid
+
+# Ensure matching column name for joining
+colnames(mps24)[1] <- "mpid"
+
+# Merge vote data with MP metadata
+vote_data_long <- vote_data_long %>%
+  left_join(mps24, by = "mpid")
+
+# Clean vote data
+vote_data_clean <- vote_data_long %>%
+  filter(!vote_code %in% c(-9, 3)) %>%                    
+  filter(!grepl("\\[Lords\\]", Bill)) %>%                 
+  mutate(
+    vote_code = case_when(                                
+      vote_code == 1 ~ 2,   # tellaye → aye
+      vote_code == 5 ~ 4,   # tellno  → no
+      TRUE ~ vote_code
+    ),
+    vote_label = case_when(                              
+      vote_code == 2 ~ "Aye",
+      vote_code == 4 ~ "No",
+      TRUE ~ NA_character_
+    ),
+    mp_unique_id = paste(firstname, surname, mpid, sep = "_")  
+  )
+
+
+
+# Prepare IRT matrix
+
+vote_data_dedup <- vote_data_clean %>%
+  distinct(mpid, voteno, .keep_all = TRUE)
+
+# Add binary vote
+vote_data_dedup <- vote_data_dedup %>%
+  mutate(vote_binary = ifelse(vote_code == 2, 1, 0))
+
+# Pivot to wide format
+irt_matrix <- vote_data_dedup %>%
+  dplyr::select(mp_unique_id, party, voteno, vote_binary) %>%
+  pivot_wider(names_from = voteno, values_from = vote_binary)
+
+irt_matrix <- irt_matrix %>%
+  relocate(party, .after = mp_unique_id) %>%               
+  column_to_rownames("mp_unique_id")                         
+
+
+print(dim(irt_matrix))
+head(irt_matrix[, 1:10])
+
+
+```
+
+## 2019 IRT Model
+
+```{r}
+caroline_votes <- vote_data_long %>%
+  dplyr::filter(firstname == "Caroline", surname == "Lucas") %>%
+  dplyr::select(voteno, caroline_vote_code = vote_code)
+
+
+vote_compare <- vote_data_long %>%
+  left_join(caroline_votes, by = "voteno")
+
+vote_compare <- vote_compare %>%
+  mutate(
+    agreement = ifelse(vote_code == caroline_vote_code, 1, 0)
+  )
+
+vote_compare <- vote_compare %>%
+  mutate(mp_unique_id = paste(firstname, surname, mpid, sep = "_"))
+
+
+agreement_matrix <- vote_compare %>%
+  dplyr::select(mp_unique_id, voteno, agreement) %>%
+  distinct() %>%
+  tidyr::pivot_wider(names_from = voteno, values_from = agreement)
+
+
+library(ltm)
+
+# Clean agreement matrix 
+agreement_matrix_clean_2017 <- agreement_matrix_2017 %>%
+  column_to_rownames("mp_unique_id") %>%
+  as.matrix() %>%
+  .[rowSums(is.na(.)) < ncol(.) * 0.5, ]  # Keep MPs with <50% missing votes
+
+agreement_matrix_clean_2017 <- agreement_matrix_clean_2017[, colSums(is.na(agreement_matrix_clean_2017)) < nrow(agreement_matrix_clean_2017) * 0.5]
+
+agreement_matrix_clean_2017[is.na(agreement_matrix_clean_2017)] <- 0
+
+# Convert to data frame for ltm
+irt_data_2017 <- as.data.frame(agreement_matrix_clean_2017)
+
+# Fit 2PL IRT model to 2017 agreement data
+irt_model_2017 <- ltm(irt_data_2017 ~ z1, IRT.param = TRUE)
+
+# Summary of 2PL model
+summary(irt_model_2017)
+
+plot(irt_model_2017, type = "ICC")
+
+
+
+# Extract MP scores from IRT model
+mp_scores <- factor.scores(irt_model, resp.patterns = irt_data)
+
+# The scores are in mp_scores$score.dat, with rownames = MP IDs from irt_data
+mp_scores_full <- mp_scores$score.dat %>%
+  tibble::rownames_to_column("mp_unique_id") %>%
+  dplyr::select(mp_unique_id, ideology_score = z1)
+
+mp_scores_full <- mp_scores_full %>%
+  left_join(mp_metadata, by = "mp_unique_id")
+
+
+# Prepare metadata for joining
+# Extract firstname, surname, mpid from mp_unique_id string to join with vote_compare
+mp_metadata <- vote_compare %>%
+  distinct(mp_unique_id, firstname, surname, party) %>%
+  mutate(
+    MPName = paste(firstname, surname),
+    Party = party
+  ) %>%
+  dplyr::select(mp_unique_id, MPName, Party)
+
+# Join scores and metadata
+mp_scores_full <- mp_scores_full %>%
+  arrange(ideology_score) %>%
+  mutate(
+    MPName_factor = factor(mp_unique_id, levels = mp_unique_id)
+  )
+
+
+# Plot ideology scores
+ggplot(mp_scores_full, aes(x = ideology_score, y = MPName_factor, color = Party)) +
+  geom_point() +
+  theme_minimal() +
+  labs(
+    title = "MP Ideological Scores Based on Voting Alignment with Carloline Lucas",
+    x = "Ideology Score (θ)",
+    y = NULL
+  ) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.position = "bottom"
+  ) +
+  scale_color_brewer(palette = "Set1")
+
+plot(irt_model, type = "ICC")
+
+```
+
+
+## 2017 Model
+
+```{r}
+library(tibble)
+library(dplyr)
+library(tidyr)
+
+# Load data
+mps_2017 <- read.delim("https://www.publicwhip.org.uk/data/votematrix-2017.txt", skip = 19)
+vm_2017  <- read.delim("https://www.publicwhip.org.uk/data/votematrix-2017.dat")
+
+# Convert date column to Date format
+vm_2017 <- transform(vm_2017, date = as.Date(date))
+
+# Reshape vote matrix to long format
+vote_data_long_2017 <- vm_2017 %>%
+  pivot_longer(
+    cols = starts_with("mpid"),
+    names_to = "mpid",
+    values_to = "vote_code"
+  ) %>%
+  mutate(mpid = as.integer(sub("mpid", "", mpid)))
+
+colnames(mps_2017)[1] <- "mpid"
+
+# Merge vote data with MP metadata
+vote_data_long_2017 <- vote_data_long_2017 %>%
+  left_join(mps_2017, by = "mpid")
+
+# Clean vote data
+vote_data_clean_2017 <- vote_data_long_2017 %>%
+  filter(!vote_code %in% c(-9, 3)) %>%                    
+  filter(!grepl("\\[Lords\\]", Bill)) %>%                 
+  mutate(
+    vote_code = case_when(                                
+      vote_code == 1 ~ 2,
+      vote_code == 5 ~ 4,
+      TRUE ~ vote_code
+    ),
+    vote_label = case_when(
+      vote_code == 2 ~ "Aye",
+      vote_code == 4 ~ "No",
+      TRUE ~ NA_character_
+    ),
+    mp_unique_id = paste(firstname, surname, mpid, sep = "_")
+  )
+
+vote_data_dedup_2017 <- vote_data_clean_2017 %>%
+  distinct(mpid, voteno, .keep_all = TRUE) %>%
+  mutate(vote_binary = ifelse(vote_code == 2, 1, 0))
+
+# Pivot to IRT wide matrix
+irt_matrix_2017 <- vote_data_dedup_2017 %>%
+  dplyr::select(mp_unique_id, party, voteno, vote_binary) %>%
+  pivot_wider(names_from = voteno, values_from = vote_binary) %>%
+  relocate(party, .after = mp_unique_id) %>%
+  column_to_rownames("mp_unique_id")
+
+# Check
+print(dim(irt_matrix_2017))
+head(irt_matrix_2017[, 1:10])
+
+# Filter Jeramy Corbyn votes from 2017
+jeramy_votes_2017 <- vote_data_long_2017 %>%
+  dplyr::filter(firstname == "Jeremy", surname == "Corbyn") %>%
+  dplyr::select(voteno, jeramy_vote_code = vote_code)
+
+# Join all MPs’ votes with Jeramy's
+vote_compare_2017 <- vote_data_long_2017 %>%
+  left_join(jeramy_votes_2017, by = "voteno") %>%
+  mutate(
+    agreement = ifelse(vote_code == jeramy_vote_code, 1, 0),
+    mp_unique_id = paste(firstname, surname, mpid, sep = "_")
+  )
+
+# Pivot to agreement matrix
+agreement_matrix_2017 <- vote_compare_2017 %>%
+  dplyr::select(mp_unique_id, voteno, agreement) %>%
+  distinct() %>%
+  tidyr::pivot_wider(names_from = voteno, values_from = agreement)
+
+library(ltm)
+
+# Clean agreement matrix
+agreement_matrix_clean_2017 <- agreement_matrix_2017 %>%
+  column_to_rownames("mp_unique_id") %>%
+  as.matrix() %>%
+  .[rowSums(is.na(.)) < ncol(.) * 0.5, ]  # Keep MPs with <50% missing votes
+
+agreement_matrix_clean_2017 <- agreement_matrix_clean_2017[, colSums(is.na(agreement_matrix_clean_2017)) < nrow(agreement_matrix_clean_2017) * 0.5]
+
+agreement_matrix_clean_2017[is.na(agreement_matrix_clean_2017)] <- 0
+
+# Convert to data frame for ltm
+irt_data_2017 <- as.data.frame(agreement_matrix_clean_2017)
+
+# Fit 2PL IRT model to 2017 agreement data
+irt_model_2017 <- ltm(irt_data_2017 ~ z1, IRT.param = TRUE)
+
+# Summary of 2PL model
+summary(irt_model_2017)
+
+plot(irt_model_2017, type = "ICC")
+
+
+# Extract scores
+mp_scores_2017 <- factor.scores(irt_model_2017, resp.patterns = irt_data_2017)
+
+mp_scores_full_2017 <- mp_scores_2017$score.dat %>%
+  tibble::rownames_to_column("mp_unique_id") %>%
+  dplyr::select(mp_unique_id, ideology_score = z1)
+
+# Get metadata
+mp_metadata_2017 <- vote_compare_2017 %>%
+  distinct(mp_unique_id, firstname, surname, party) %>%
+  mutate(
+    MPName = paste(firstname, surname),
+    Party = party
+  ) %>%
+  dplyr::select(mp_unique_id, MPName, Party)
+
+# Join and plot
+mp_scores_full_2017 <- mp_scores_full_2017 %>%
+  left_join(mp_metadata_2017, by = "mp_unique_id") %>%
+  arrange(ideology_score) %>%
+  mutate(
+    MPName_factor = factor(mp_unique_id, levels = mp_unique_id)
+  )
+
+# Plot ideology
+library(ggplot2)
+
+ggplot(mp_scores_full_2017, aes(x = ideology_score, y = MPName_factor, color = Party)) +
+  geom_point() +
+  theme_minimal() +
+  labs(
+    title = "MP Ideological Scores Based on Voting Alignment with Jeramy Corbyn (2017)",
+    x = "Ideology Score (θ)",
+    y = NULL
+  ) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.position = "bottom"
+  ) +
+  scale_color_manual(values = RColorBrewer::brewer.pal(n = length(unique(mp_scores_full_2017$Party)), name = "Paired"))
+
+
+
+```
