@@ -209,7 +209,6 @@ Ensure output directory is writable. Check console output for errors.
 ## License & Attribution
 
 Parliament data sourced from UK Parliament Commons Votes API (public data).
-Python port from original C# implementation.
 
 ---
 
