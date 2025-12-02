@@ -229,6 +229,3 @@ Extend `DataProcessor` in `data_processor.py` for custom analysis or filtering.
 
 ---
 
-## Contact
-
-For issues or improvements, refer to the C# original project documentation.
