@@ -220,7 +220,6 @@ model-builder-r/
 
 If using this analysis, please cite:
 - Public Whip data source: https://www.publicwhip.org.uk/
-- IRT methodology: Battari et al. (2015) DW-NOMINATE or standard IRT references
 
 ## Licence
 
