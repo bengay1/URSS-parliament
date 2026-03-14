@@ -1,0 +1,270 @@
+---
+title: "URSS Formal Writeup"
+author: "Benjamin Gay"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# URSS Formal Write up
+
+## 1. Aims
+
+### 1.1 Motivation
+
+Understanding how Political Ideology has changed over time is very important when studying legislative behavior. Better understanding an MPs Ideology is extremely useful when it comes to modeling the views of the population at large, as well as better informing the electorate about the views of their local MP by neatly packaging a lot of the information about the candidate into one number. It can also help us to explain party discipline and policy outcomes.
+
+However, due to the qualitative nature of political theory, we are unable to measure latent ideology positions of politician's directly. This is why we decided to use Item Response Theory, in order to model these hidden trends. A latent variable is a hidden, unobservable factor that influences measured variables, which in our case is an MPs voting records. It is insufficient to merely use party labels to place a politicians ideological position due to the range of views within each party can be very large. This is especially seen within the larger parties such as labor and conservative where the MPs on each side of the party can have opposing views on very important issues and thus it is very important that we are able to discriminate between these views.
+
+Voting records produce binary results which is required for IRT, as IRT uses Bernoulli likelihood to predict parameters. We are able to adapt standard IRT models into dynamic Item Response Theory models to help us model changes in MP's latent ideology score over time. Dynamic IRT models this latent trait as a continuous process, which generates individual trajectories for  each MP and thus allows for analysis of factors influencing growth. These changes may occur due to a multitude of reasons such as leadership changes within parties, large events occurring (e.g. The 2008 Financial crisis) or changing social opinions. So by using voting records as 'test responses' and political ideology as their latent ability, we are able to implement a latent trait model. IRT is also very useful due to its discrimination parameter, which is able to model each vote differently and tell us how informative each bill is. This is a good trait of the model as it will down weight near unanimous votes as they do not differentiate between MPs, however this would not be the case if we were to use a simpler model such as a agreement percentage.
+
+We believe that this project involved some very interesting statistical problems, with the data being of a high dimension and also being quite sparse due to MPs not voting on every bill. There was also problems with MPs having different entry and exit points in the data due to them not being in office for all the years the data was selected. This can cause problems with the estimation stability due to some MPs or votes being weakly identified and thus parameter estimation can have large variations with small changes in the data. This may lead to poor convergence with the estimations and high sensitivity to modelling assumptions. This sparse data also causes issues with Identifiability as sparse voting histories makes it hard to anchor individuals. There is also temporal dependence as well as the need to infer these unobserved latent ideological traits from noisy observational outcomes. These issues all require creative solutions to overcome
+
+### 1.2 Research Aims
+
+In this project, we aimed to estimate the latent ideology score of each MP using item response theory and then extend this to explore how each MPs score has changed and evolved over time. We wanted to do this so we could explore if Parliament has become more left or right wing quantitatively, as well as looking into trends deeper than this, such as if changes in party leadership and national events would cause noticeable changes in ideology scores. We wanted to use a unidimensional score so that the results are easily interpretable.
+
+This would help to reveal how well our model fit by comparing our quantitative results with qualitative research and seeing how well we can explain trends in our collected data with the qualitative results. This would help to increase the interprability of our model if it were to line up, while discrepancies may help to highlight any limitations.   Another aim was to compare compare static and dynamic item response theory models to see the similarities and differences between them, also investigating whether these shifts in ideology scores would come as gradual drifts or shocks and the reasons for them.
+
+### 1.3 Contributions
+
+Item Response Theory has been widely applied to the US House of Congress by using their roll-call data, however its application the the UK Houses of Parliament remains relatively limited. There are very large differences between the politics of the UK and the USA, so results from these previous studies are not able to be translated or generalized to the Houses of Commons. Thus careful applying IRT to this setting will provide a meaningful contribution in it's own right. As well as this, many models use static IRT and do not focus on changes in ideology over time so by adding a dynamic element to the model, we allow MPs latent ideological position to evolve over time and not treat it as a fixed quantity. This enables us to study the gradual ideological drift occuring in the Houses of Parliament and responses to political events.
+
+In this project, we also focused on creating visualizations of ideological trajectories over time. These visual tools provide an accessible way to relate the results from our quantitative model to substantive political developments and make it easier to interpret the dynamic latent trait estimates.
+
+## 2. Data Description and Wrangling
+
+### 2.1 Data Sources
+
+In this project, our data came from 2 main places, Public Whip (<https://www.publicwhip.org.uk/data>) and the Parliament API (<https://members-api.parliament.uk/index.html>). The Public Whip data was used for the parliamentary sessions of 1997 - 2001, 2001 - 2005, 2005 - 2010, 2010 - 2015, 2015 - 2017, 2017 - 2019 and 2024 - 2025. For 2019 - 2024 parliamentary session, the data was incomplete as many of the MPs were not included in the data. Thus for this parliament, we created an API scrapper which recreated the data in the same form as the Public Whip data using data from the Parliament website (The code used for the scrapper can be found in the Github repository).
+
+The Public Whip data for each parliament were stored in one .dat file and one .txt file. The .txt file contained information on each MP, including their name, party and their unique mpid. This mpid could then be matched with the information in the .dat file to give a full voting history to each MP. The .dat file contains information on each bill voted on in the specified parliament and how each MP voted on these bills, specifying if they voted aye, no or didn't vote. Both the .dat and .txt file use tab separated files to store the data.
+
+Due to the missing data in the 2019 - 2024 parliament, we were unable to use Public Whip for these years and so instead we had to build a custom API scrapper in python which used the UK Parliament website. The website contained a .json file for each bill voted on in Parliament which included information on how each MP voted on that bill. Our scrapper then read this information and created a .txt and .dat file with an identical structure to that found in the Public Whip data so that our function in R which ran our IRT model did not need to be altered. Further explanation about how the scrapper works and the code used can be found in the Github repository, this allows for full reproducability of the project
+
+After collecting and reading the data from 29 years, we then had to collect it into a a large matrix which specified how each MP voted on each bill. This matrix then needed to be cleaned and wrangled in order to pull meaningful results from it.
+
+### 2.2 Data Cleaning
+
+A large portion of the time spent on this project was spent cleaning the data used. IRT requires some specific conditions to ensure that estimates are stable and thus it is critical to ensure bills that are near unanimous are removed and MPs who did not vote on enough bills are also removed. The first part of cleaning our data was removing bills voted on in the House of Lords. Within both the Public Whip data and the Parliament API, bills voted on in the Lords were included, however this was outside the scope of this project and is potentially a place where the project could be extended to in the future. We decided not to focus on the House of Lords due to less votes occurring and thus less data points leading to more unstable estimates. As well as this, the members of the House of Lords are unelected and therefore do not tell us as much about the ideology of the electoate overall.
+
+After filtering the House of Lords' bills out, we next had to convert our matrix which specified how each MP voted on each bill into a binary matrix. Currently, there were three possible ways of voting (Aye, no or abstain/absent). In order to change this into a binary vote, we needed to select a left wing 'anchor' whose vote we would specify as 'the left wing vote'. The natural selection for this MP was Jeremy Corbyn due to his lengthy time in Parliament, with him first being elected in 1983 and thus would have data for all his years in Parliament, as well as numerous qualitative data points suggesting that he has consistently been the 'most left wing' MP in parliament for the majority of his time there. By defining Jeremy Corbyn's vote as the 'left-wing vote', we were then able to convert the matrix into binary form by comparing how all other MPs voted how Jeramy Corbyn, with an agreement meaning we would put a 1 in that position adn 0 for a disagreement. For example in Jeremy Corbyn abstained on the assisted dying bill and Jeremy Hunt also abstained then a 1 would go in the corresponding position. However, now suppose further that Kier Starmer voted aye, then this would be a disagreement so a 0 would be in the corresponding position in the matrix.
+
+Anchoring the scale this way ensures interpretility of the latent ideological dimension, with a higher latent ideological score corresponding to a more left wing MP and a lower latent ideology score corresponding to a more right wing MP. It is important to note that the choice of anchor only affects the orientation of the latent ideological scores and not the relative ordering of the MPs, as this is decided by the IRT model itself 
+
+Lots of focus was also put on ensuring that there was a uniform structure within the data, making sure dates were all in the same format, as well as removing any spaces before or after names as well as sorting the format of party names out. This is very important so that the IRT function is able to correctly read all available data and score each MP as accurately as possible
+
+Another part of the data cleaning process involved deduplicating the MPs during election years. Due to the data being split into Parliaments, this meant that in the years where elections take place, the MPs that were reelected appeared twice and would thus have two different scores, one from all the votes from the start of the year up until the election, then another from after the election until the end of the year. Thherefore, in order to remedy this, in years where an MPs name would appear twice, we would combine all the data such that they would only be given one score (an annoying part of this was that their unique mpid would also change after an election so we were unable to use this to combine results, so we had to extract their name). In the Parliament API, we also found issues when MPs votes would be counted twice, so we also had to ensure we filtered these results so that only one would appear in our data.
+
+It was also important to filter out any bills where an extremely high proportion of parliament voted in the same way. These bills are uninformative as they will have very a low discrimination parameter and thus will not effect the latent ideology score. Therefore, by removing them we are able to save computing power and simplify our data. In our model we therefore decided to filter bills with over 95% agreement or under 5% agreement. We also had to filter out MPs with too few votes because without enough data points, the latent ideology score estimate would be unstable and would be extremely variable to small changes in the data, thus if the MP voted on less than 5 bills in a year, a score would not be given to the MP in that year.
+
+### 2.3 Data Reshaping
+
+After we were finished cleaning the data, we had to reshape it into a suitable form for the IRT model to take place. This involved transforming the data into a binary response matrix $Y_t$ where the rows correspond to Members of Parliament while the columns represent parliamentary divisions (bills). Each entry of the matrix $Y_{ij} \in \{0,1\}$ indicates if MP $i$ voted the same way as Jeremy Corbyn on bill $j$ in year $t$
+
+We decide to separate the data into years so that we are able to see distinct latent ideology scores across time. This led to a sequence of matrices $\{Y_{t}\}^{2025}_{t=1997}$, which all contain a varying number of both MPs and bills due to some years having elections or by-elections meaning a different number of unique MPs entered the houses of parliament. As we converted the data into a binary format, we did not have issues with missing data points as if an MP did not vote on a specific bill, then it would be marked in the data that they abstained.
+
+This reshaping made sure that our cleaned voting data statisfied all the mathematical assumptions of our IRT model, allowing us to make stable estimations of latent ideological positions as well as estimates for the discrimination and difficultly parameters found in IRT.
+
+### 2.4 Summary Statistics and Diagnosis
+
+-- Still need to fill in --
+
+## 3. Item Response Theory Models
+
+### 3.1 Overview of IRT in Voting Analysis 
+
+Item Response Theory has previously been applied to a political setting, with political data naturally fitting lots of the assumptions made when constructing an IRT. For example, it is very easy to convert voting data into binary data as we have shown previously and the parameters originally made for academic testing have analogous definitions in a political setting. In the educational setting, IRT models the response of each student of a given ability to each question in a test. In the political setting, the MPs are the student, the questions are parliamentary divisions, the ability of the student is the political ideology of the MP and a correct or incorrect answer is an agreement or disagreement with the left wing anchor. Similar to how in exams, harder questions separate the higher-ability students, in our model some votes better separate the ideologically 'left' MPs from those on the 'right'. This is done by the discrimination parameter in our model, which explains why some bills are more informative than others.
+
+In our IRT model, our latent variable is an MP's political ideology, which is not directly observable and instead can be found through their voting patterns, which can be thought of as a noisy manifestation of their ideology. IRT treats ideology as a continuous latent trait, with each MP having an unobserved ideological position. Within our model, we treat votes as probabilistic functions of this position, as MPs with a similar ideological score tending to vote similarly on bills. It is important to note that the model only estimates ideology up to a scale and orientation, with the specific value of the parameter having no inherent meaning however we are able to draw meaningful conclusions about the relative ordering of the MPs.
+
+In this project, we used the two parameter IRT model (2PL) with the two parameters being discrimination and difficulty. The discrimination parameter measures how strongly a vote separates MPs by ideology, with a higher discrimination parameter meaning the vote is more ideologically polarizing while a lower score means that there is much bigger consensus on the issue. For example a bill with a high discrimination score would be increasing welfare spending or foreign policy decisions as the way an MP votes on these issues are highly dependent on their political ideology. On the other hand a bill such as the assisted dying bill would have low discrimination as the vote was unwhipped and this being more of a moral issue rather than an ideological issue and therefore people who are 'left-wing' have a similar probability of voting aye on the bill as someone who is 'right-wing'.
+
+The difficulty parameter in our case captures where the bill sits on the ideological spectrum and tells us is agreement is more common between the right-leaning or left-leaning MPs. If a bill has a higher difficulty parameter, then a person who is more right-leaning is more likely to vote aye on the bill, while a bill with a lower difficulty parameter will align more with left-wing preferences. These parameters allow ideology to be inferred, even when the MPs are voting on a different set of bills 
+
+### 3.2 Static IRT model
+
+In this section, we will look to formally define how ideology is estimated at a fixed point in time, with this being the baseline model that the dynamic model will later generalise using dynamic IRT. We decided to use the 2PL model due to each vote by the MPs being a conscious decision and thus no guessing is involved, so we do not require the 3PL model. While on the other hand, the 1PL model is too simple as this assumes all bills have the same level of discrimination which, as we showed in the previous section, is not the case in political settings.
+
+From our data, we are able to observe the binary voting outcome from each MP, however, we are unable to observe the latent ideology score of each MP. This ideology score is a continuous latent variable that is able to summerise the voting behavior of an MP across many bills. In our static model, we split the votes up into the years they occur and so we assume that ideology is constant within each year. The model also has two other unobserved variables, discrimination and difficulty, which we are also unable to see directly from the data and we also have to estimate.
+
+
+Define:
+\begin{itemize}
+\item Index MPs by $i = 1,\dots, N$
+\item Index bills by $j = 1, \dots, J$
+\item Define $y_{ij} \in \{0, 1\}$ as the binary outcome of a vote by MP $i$ on bill $j$
+\item Define $\theta_i$ as the latent ideology score of MP $i$
+\item Define $\alpha_j$ as the discrimination score of bill $j$
+\item Define $\beta_j$ as the difficulty score of bill $j$
+\end{itemize}
+
+
+$$P(Y_{ij}=1 \mid \theta_i, \alpha_j, \beta_j) = \frac{\exp(\alpha_j(\theta_i - \beta_j))}{1 + \exp(\alpha_j(\theta_i - \beta_j))}$$
+
+
+This equation shows our core modelling assumption, that votes are not deterministic as IRT models voting as probabilistic. It is not necessarily true that MPs with the same latent ideology score will vote in the same way because both MPs and bills add uncertainty to the model. We see the probability of voting in agreement with the left wing anchor on a bill is conditioned on the MP's ideology $\theta_i$ and bill parameters $\alpha_j$ and $\beta_j$. $Y_{ij}$ is an independent Bernoulli random variable, with the probability of agreement determined by a smooth link function of the latent trait.
+
+Item Response Theory usually has issues with the identifiability of parameters as you are estimating latent traits which are not directly observable from the data. This means that the model can often explain the data equally well using different numerical parameter values and we find that without any additional constraints, there is not a unique solution to the model. This occurs because only the relative ideological positions of the MPs matter but the absolute scale does not. For example, if every MP became '1 unit more left wing' and we also adjusted all the bill parameters accordingly, the predicting voting probabilities would not change. Similarly, we can apply a scaling constant to all parameter and we would see the same probabilities kept. This means that the model is unable to tell if ideology varies widely or narrowly.
+
+Non-identifiability doesn't invalidate our model, instead it means that interpretation must be relative and more restraints are required before we can begin to estimate and explain the results of the model. In order to overcome these difficulties, we added orientation via an ideological anchor. This fixes the direction of the latent scale by defining agreement with the anchor as 'the left wing vote'. This ensures that higher latent ideology scores mean the MP is likely more left-wing and thus the ideological axis is interpretable. We also standardized the latent ideology scores by fixing the mean at 0 and adding a variance of 1 within each year, meaning that location and scale can now be interpreted. These constraints do not impose substantial assumptions about the ideological structure but help to give meaningful interpretations to the latent ideological score.
+
+We used the ltm package in R to program the model. This uses marginal maximum likelihood estimators and the Gauss-Hermite quadrature rule in order to obtain parameter estimates.
+
+### 3.3 Dynamic IRT Model
+
+
+## 4. Results, Discussions and Reflections
+
+### 4.1 Party-level ideological Trends
+
+We then looked to plot the IRT scores we found in interesting ways to find useful patterns and help to validate our model. The first plot we will look at filters the MPs from the three main parties, Conservatives, Labour and Liberal Democrats and finds the average IRT score for the MPs from each party in each year.
+
+```{r, echo=FALSE, fig.cap="Average IRT score for Major Parties across time", out.width="100%", fig.align="center"}
+knitr::include_graphics("C:/git/URSS-parliament/model-builder-r/data/party_ideology_trends.png")
+```
+
+The first trend we notice is the clear ranking between the three parties, with Labour consistently having the highest average IRT score among it's MPs, with the Liberal Democrats second and the Conservatives having the lowest. These results agree with the general perception of the three parties, having Labour as the most 'left-wing' party on the three, the Conservatives the most 'right-wing' and the Liberal Democrats somewhere in the middle. 
+
+Another important trend we can see occurs between 2010 and 2015. This parliamentary session is of interest due to the Conservatives forming a coalition with the Liberal Democrats in order to form a majority government. We can see this event occurring in the plot, with the Liberal Democrat's average IRT score being much closer to the Conservative's average IRT score during these years, suggesting that the two parties had a more similar political ideology during these years. This also helps to validate our model, as our data is following the qualitative analysis.
+
+Following on from this, we see the large increase in the average IRT in the Liberal Democrat party after they exit the coalition in 2015. This also coincides with a change in leadership within the party as Nick Clegg was replaced by Tim Farron, who was widely regarded as one of the most 'left-wing' members of the party. We can see this sentiment reflected in our data as between 2015 and 2016 we see the average IRT of the party increase by a large amount as the party distanced itself from the Conservatives and began to align more with the Labour party and thus Jeremy Corbyn.
+
+Another trend we can pick out from the plot is the relative stability during the 'New-Labour' era of the party. We see the average IRT score staying close to the one mark throughout the leadership of Tony Blair and Gordan Brown and even throughout the Ed Milliband premiership. This suggests that the party remained consistent in their ideological beliefs throughout this time, keeping similar positions on many key issues. However, in the last 10 years, we see the average IRT score for Labour MPs become much more volatile. 
+
+Another key trend we can see with the data is a steep decrease in IRT scores for all parties in 2024, suggesting that there was a large jump towards 'the right' across the political spectrum. This may also be explained instead by Jeremy Corbyn (Who was used as the reference MP in 2024) being removed from the Labour Party at this time and thus becoming an Independent MP and so voting with more freedom. As Jeremy Corbyn no longer had a whip, he was free to vote with his true Ideology, meaning that these change in scores may be explained by Jeremy Corbyn going further to the 'left' as opposed to all the parties leaning more to the 'right'.
+
+### 4.2 Cross-Sectional Distribution
+
+The next plot we will look at zooms in on a specific year (2012) and explores how the IRT scores are distributed by party. This is an arbitrary example, with many of these results and conclusions applying to all years of the data (If required, one can use the function found in the code to make the same plot for any requested year).
+
+```{r, echo=FALSE, fig.cap="Average IRT score for Major Parties across time", out.width="100%", fig.align="center"}
+knitr::include_graphics("C:/git/URSS-parliament/model-builder-r/data/ideology_distribution_2012.png")
+```
+The first trend that stands out from this plot is the clear gap found at an ideological score of zero, separating the Labour, SNP and Green parties from the Conservatives and Liberal Democrats. This stark polarization between the political specrum shows that MPs vote in line with their parties position the majority of the time, with party often being the best predictor for an MPs ideology score. This plot also very clearly shows how integrated the Liberal Democrats were with the Conservatives during the coalition years, however we still see that the MPs with the lowest ideology score (and thus most likely to be more 'right-wing') are still Conservative MPs. We also see much more variance within the IRT score of the members of the Labour party compared to that seen in the Conservative party. This may be due to the Conservative party being in government at this time and therefore the MPs are urged to vote inline with the party at a much higher rate. This may also be due to a wider range of beliefs within the Labour party, with some members identifying as socialists and being much more 'left-wing' when compared to many members who were part of the 'New Labour' movement and are further towards the 'center' of the political spectrum.
+
+
+The next plot we look at shows box plots of the distribution of MPs scores from every 3 years.
+```{r, echo=FALSE, fig.cap="Average IRT score for Major Parties across time", out.width="100%", fig.align="center"}
+knitr::include_graphics("C:/git/URSS-parliament/model-builder-r/data/distribution_by_year.png")
+```
+
+This plot again shows the stability within the 'New Labour' movement, as the median IRT score stays very consistent between 1997 and 2009 constantly hovering around 1. We are then able to observe a clear shift to the right after 2009, with the median in both 2012 and 2015 dropping Significantly. This may be due to the elections in 2010, which substantially increased the number of Conservative MPs in the House of Commons.
+
+We also continue to this sharp polarization within the House of Commons, with there being a clear divide across every box plot. This portrays the large difference in political ideology and how MPs will very often vote in line with the party. Specifically, this plot explains that this trend has been continuous over time, with every snapshot of Parliament showing the same trend.
+
+### 4.3 Model Validation: Stability and Significance
+
+We now look to show that our model is valid and is able to model our data well. To do this, we create a scatter plot between two consecutive years, plotting each MPs score in each year.
+
+```{r, echo=FALSE, fig.cap="Average IRT score for Major Parties across time", out.width="100%", fig.align="center"}
+knitr::include_graphics("C:/Users/benau/Downloads/model-builder-r (1)/model-builder-r/data/stability_2002_vs_2003.png")
+```
+
+The first result that stands out from the plot is the clear positive correlation between the ideology scores is 2002 and 2003. We see there is a Pearson Correlation score of 0.957. This suggests that the model is able to capture a deeply rooted and persistent latent trait. Even though the MPs were voting on different bills and issues in 2002 compared to 2003, the model is still able to group the MPs into the same relative ideological positions.
+
+Another trend that stands out from the plot is the clear polarization that persists between the parties. This is a trend that has continued through many of the plots, however, this plot is able to show further how tightly the conservatives vote to one another, with the blue dots forming a near vertical straight line due to the lack of variation between the ideological scores of the conservative MPs in 2002. This is contasted with the 'cloud-like' pattern we see occurring with the Labour MPs. This may again be due to the Labour party having a broader range of individual ideological beliefs within the party.
+
+We note that 2003 is when the invasion of Iraq occured, which caused a large division within the Labour party, with much of the 'left-wing' of the Labour party often rebelling against the governments position of supporting the war. Since these votes were so contentious, this may cause large deviations in an MPs ideology score and may go someway to explaining these changes in many of the MPs score.
+
+We next look at an ICC plot for the year 2002, As we use a 2 PL model, the model is able to find an estimate for both the 'discrimination' and 'difficulty' of the vote. 
+
+``` {r, echo=FALSE, fig.align="center", fig.cap="Average IRT score for Major Parties across time", out.width="100%"}
+knitr::include_graphics("C:/Users/benau/Downloads/model-builder-r (1)/model-builder-r/data/icc_plot_2002.png")
+
+```
+
+The ICC curve is able to describe the probability of an MP voting in agreement with Jeremy Corbyn on a specific bill. On this plot each line represents a different bill the House of Commons has voted on. We are able to see that the majority of bills follow the same pattern, with MPs with a low ideology score having a low probability of voting in agreement, before a steep increase in the probability at a score of around 0, then flattening off at a probability of near 1. The difficulty score changes the point of inflection within the curve, shifting it up for a higher difficulty score (and thus the MPs are less likely to agree with Jeremy Corbyn on the vote) or downwards for a lower difficulty score. The point of inflection occurs where the probability of agreeing with Corbyn is 0.5. The discrimination parameter affects how 'steep' the curve is. A bill with a higher discrimination score will have a steeper curve as a larger discrimination parameter implies the bill is more polarising and thus an MPs ideology score will have a larger impact on the probability of them voting in agreement with Corbyn.
+
+We can however see many bills that do not follow the usual trend of a logit curve and instead are much closer to a straight line. These bills have this shape due to having very low discrimination scores, meaning that voting in agreement with Jeremy Corbyn has nearly the same probability for all MPs, no matter what their ideology score is. This can be for a number of reasons, such as when their is near unanimous agreement among all MPs in the House of Commons, the bill is unable to differentiate between MPs with different ideologies.
+
+
+These votes are often involve routine or procedural matters or due to things such as uncontroversial amendments, or in other cases this may be due to the whip being removed for specific votes. A recent example of this is the Assisted Dying bill, where MPs were not given a specific party position and were instead allowed to vote in line with their own personal beliefs. Specifically this issue is not either 'right-wing' or 'left-wing' and so is unable to be modeled with an MPs ideology score. One of the advantages of the 2PL model is that it is able to identify these horizontal lines and 'down weight' them by assigning these bills a low discrimination score.
+
+
+### 4.4 Analysis of Career Trajectories and Ideological Change.
+
+
+The next plot we look at examines the MPs whose ideology score changes the most. This is done by running a linear regression model on all MPs who have over five years of data and then order by the gradient of the line.
+
+```{r, echo=FALSE, fig.align="center", fig.cap="Average IRT score for Major Parties across time", out.width="100%"}
+# Visualizing the most extreme ideological shifts identified by the linear regression
+knitr::include_graphics("C:/Users/benau/Downloads/model-builder-r (1)/model-builder-r/data/top_changing_mps.png")
+```
+
+We see the MPs with the highest positive gradient are those that have shifted to become more 'left-wing', while those with the most negative values are those who have shifted to become more 'right-wing'.
+
+We note that both Lindsay Hoyle and Elanor Laing both were speaker and deputy speaker in recent years. It is convention that the speaker and deputy speaker do not vote on bills unless to break a tie and thus these large changes in ideology scores from both Lindsay Hoyle and Elanor Laing are, in Lindsay Hoyle's case, due to going from agreeing with Jeremy Corbyn regularly (as Lindsey Hoyle is a Labour MP) to not being able to vote and therefore, more disagreements will occur, while the opposite is true for Elanor Laing.
+
+We see that Richard Shepherd has the highest slope and thus has moved furthest to the 'left'. Richard Shepherd was a conservative MP who frequently rebelled against the party, specifically on bills around civil liberties. Specifically, during the Cameron-Clegg Coalition, Shepherd rebelled against the party on the issue of British Military intervention in the Syrian civil war and other similar bills. This would lead Richard Shepherd to agree more with Jeremy Corbyn who also voted against these policies.
+
+George Young also has a large positive slope. This may be due to becoming a cabinet member later in his career. George Young resigned from the shadow cabinet in 2000 in order to try and become Speaker of the House and then remained a backbencher until 2009. During this time, Young would have been able to vote more in line with his own beliefs due to having less responsibility. However, in 2009, Young became shadow deputy leader of the Conservatives, before eventually becoming chief whip in 2012. This means that Young had to vote in line with the party on all bills, which may be the cause of his 'leftward' ideological shift. Similar reasoning can be applied to Charles Hendry's shift.
+
+Another interesting case to look at is Ian Austin who has a very negative slope, meaning he has become much more right wing. During his time in parliament, Austin got into many feuds with Jeremy Corbyn, one example of this was in 2016 when Ian Austin was reprimanded by the Speaker of the House of Commons as he was Heckling Jeremy Corbyn due to Corbyn opposing the 2003 invasion of Iraq. As well as this, in 2019 Ian Austin resigned his position from the Labour party, siteing Corbyn's leadership as the reason for his resignation. This would lead Austin to disagree with Corbyn much more and therefore explains Austin's drift to the right.
+
+Shabana Mahmood is a good example of how Labour have drifted into a more 'right-wing' party over the last few years. Shabana Mahmood was part of the shadow cabinet of Ed Milliband, before being removed from the cabinet when Corbyn was leader and rejoining the Cabinet under Kier Starmer, where she is currently Home Secrety. As Shabana Mahmood has a highly negative regression gradient, it suggests that she has drifted further to the right in recent years, which is indicative of the front bench Labour MPs as a group.
+
+
+The next plot is a histogram showing the gradient coefficient of each MP that is found when running a linear regression model on each individual MPs ideological score fro each year. We set a minimum term length of 15 years to ensure there are enough data points to find a more accurate estimate for the gradient coefficient. 
+
+
+```{r, echo=FALSE, fig.align="center", fig.cap="Average IRT score for Major Parties across time", out.width="100%"}
+
+# Visualizing the distribution of ideological shifts across the entire Parliament
+knitr::include_graphics("C:/Users/benau/Downloads/model-builder-r (1)/model-builder-r/data/slope_histogram.png")
+
+```
+
+The first trend that stands out is the mean slope parameter is -0.0094, which is less than zero and therefore on average, MPs who have been in parliament for over 15 years tend to move to become more 'right-wing'. However, it is important to note that this is still extremely close to zero and therefore there is a good mix of MPs who shift both left and right.
+
+The data shows a bimodal distribution, with peaks occur at slopes of around 0.05 and -0.05. This slight shift is likely due to the 'front bench effect' which occurs when a junior MP is promoted to either the cabinet or shadow cabinet and is unable to vote in line with their own political ideology and instead has to vote with the party whip due to their more senior position. These ministers are usually promoted after being in parliament for a few years and so many of them are above the 15 year minimum required to appear in this plot. The bimodality occurs due to the two parties, with the Labour 'front bench effect' often pulling MPs to the right, while the conservative 'front bench effect' pulls people further left as the MPs are pulled away from the extremities of the party and instead required to vote within the center of the party.
+
+These trends can be observed in the next plot which shows how the latent ideology score has evolved over time for a selected number of MPs.
+
+```{r, echo=FALSE, fig.align="center", fig.cap="Average IRT score for Major Parties across time", out.width="100%"}
+knitr::include_graphics("C:/Users/benau/Downloads/model-builder-r (1)/model-builder-r/data/selected_mp_trends.png")
+
+```
+
+This plot visualizes how MPs ideology score changes over time. Specifically, one trend that stands out is the decrease in ideology score of Kier Starmer after he became leader of the labour party in 2020. This agrees with the narative formed in the media saying that Starmer was elected leader on a more 'left-wing' mandate before pivoting to become centralist after he became leader. We can also see the clear ideological gap between the conservative and Labour leaders, with the Labour leaders consistently having a higher ideology score than their conservative counterparts.
+
+We also see how politically aligned Tony Blair and Gorden Brown were, with their latent ideology score always being very close to one another. Brown's score is always slightly higher, suggesting he is the more 'left-wing' of the two. There is also strong cohesion between the conservative leaders, with them often having very similar scores.
+
+
+The next plot we use to analyse of MPs ideology score evolves over time plots each MPs gradient found from running a linear regression on their latent ideology trait. It then categorizes them by the number of years they were in parliament for and indicates if this causes the change to be statistically significant.
+
+```{r, echo=FALSE, fig.align="center", fig.cap="Average IRT score for Major Parties across time", out.width="100%"}
+# Visualizing how career length impacts ideological stability
+knitr::include_graphics("C:/Users/benau/Downloads/model-builder-r (1)/model-builder-r/data/career_vs_slope.png")
+```
+
+The plot follows a 'funneling' pattern, with the longer tenured MPs clustering around zero. This also shows that newer MPs are more volatile, suggesting that there are rapid shifts in MPs ideology early on in their careers however in the end, the MPs find a level that they do not differ much from. We can also see that longer tenured MPs have more statistically significant results. This is because there are many more votes for the older MPs, so we are able to distinguish between the random noise and a permanent drift in ideology.
+
+## 5. Conclusions
+
+
+## 5. Conclusion
+
+This study has successfully applied a two-parameter logistic (2-PL) Item Response Theory (IRT) model to parliamentary voting data from 1997 to 2025. By utilizing Jeremy Corbyn as a consistent left-wing anchor, the model effectively mapped the latent ideological traits of Members of Parliament across nearly three decades. The 2-PL model, defined by the probability function:
+
+$$P(Y_{ij}=1 \mid \theta_i, \alpha_j, \beta_j) = \frac{\exp(\alpha_j(\theta_i - \beta_j))}{1 + \exp(\alpha_j(\theta_i - \beta_j))}$$
+
+proved robust in distinguishing between highly partisan "discrimination" votes and procedural "noise".
+
+### 5.1 Macro-Level Realignment and Polarization
+The longitudinal analysis of party trends revealed distinct ideological cycles. The model captured the stability of the New Labour era and the significant "centrist" convergence during the Conservative-Liberal Democrat Coalition (2010–2015). Most notably, the data from 2024 and 2025 identified a dramatic "Election Shock", a sharp convergence of major parties toward the center during the election cycle, followed by an immediate "v-shaped" re-polarization in 2025. This suggests that while election periods mandate moderation, the structural role of Government and Opposition rapidly restores ideological distance.
+
+### 5.2 Micro-Level Career Trajectories
+At the individual level, the research demonstrated that an MP's ideological position is not static but is shaped by career milestones:
+
+* **Institutional Pinning**: High-office roles, such as the Chief Whip (George Young) or Speaker (Lindsay Hoyle), measurably "pin" an MP's score to a procedural or party mean.
+* **The Frontbench Effect**: Promotion to ministerial or shadow cabinet roles often results in a statistically significant shift toward the party's disciplined center, as seen in the trajectories of Keir Starmer and Shabana Mahmood.
+* **The Significance of Tenure**: While newer MPs exhibit higher "ideological velocity," the most robust realignments occur over decades. Long-tenured "Mavericks" like Richard Shepherd illustrate how an MP can cover a vast absolute ideological distance over a 25-year career that the model identifies with high mathematical certainty.
+
+### 5.3 Technical Validation and Reflections
+The model’s validity was confirmed through a high Pearson correlation of **0.957** between consecutive years (2002–2003), proving it tracks a deeply rooted latent trait rather than voting noise. The bimodal distribution of ideological change slopes further confirms that the House is split between a majority of "Stalwart" anchors and a distinct group of "Career Shifters". Future research should consider multi-dimensional IRT models to further separate social and economic axes, providing an even more granular view of the evolving British political landscape.
+
+

@@ -77,10 +77,32 @@ source("scripts/02_calculate_ideology_scores.R")
 
 ---
 
-### Step 4: Analyse Ideological Change (5 minutes)
+### Step 4: Exploratory & Custom Analysis (5-10 minutes)
 
 ```r
-source("scripts/03_analyse_ideology_change.R")
+source("scripts/03_initial_eda.R")
+```
+
+**What it does:**
+- Calculates voting agreement rates between MPs
+- Compares ideology scores across years (stability check)
+- Visualises trends for custom MP groups
+- Generates ICC (Item Characteristic Curve) plots
+- Plots score distributions for all MPs
+
+**Outputs:**
+- `data/agreement_*.png` (agreement rate plots)
+- `data/stability_*.png` (year-on-year comparisons)
+- `data/custom_mp_trends.png` (custom MP group trends)
+- `data/icc_plot_*.png` (ICC curves)
+- `data/ideology_distribution_*.png` (score distributions)
+
+---
+
+### Step 5: Analyse Ideological Change (5 minutes)
+
+```r
+source("scripts/04_analyse_ideology_change.R")
 ```
 
 **What it does:**
@@ -99,10 +121,10 @@ source("scripts/03_analyse_ideology_change.R")
 
 ---
 
-### Step 5: Visualise Trends (5 minutes)
+### Step 6: Visualise Trends (5 minutes)
 
 ```r
-source("scripts/04_visualise_trends.R")
+source("scripts/05_visualise_trends.R")
 ```
 
 **What it does:**
@@ -128,8 +150,9 @@ Run all scripts sequentially:
 source("scripts/00_setup.R")
 source("scripts/01_load_election_data.R")
 source("scripts/02_calculate_ideology_scores.R")
-source("scripts/03_analyse_ideology_change.R")
-source("scripts/04_visualise_trends.R")
+source("scripts/03_initial_eda.R")
+source("scripts/04_analyse_ideology_change.R")
+source("scripts/05_visualise_trends.R")
 ```
 
 Or create a loop script `run_all.R`:
@@ -139,8 +162,9 @@ scripts <- c(
   "scripts/00_setup.R",
   "scripts/01_load_election_data.R",
   "scripts/02_calculate_ideology_scores.R",
-  "scripts/03_analyse_ideology_change.R",
-  "scripts/04_visualise_trends.R"
+  "scripts/03_initial_eda.R",
+  "scripts/04_analyse_ideology_change.R",
+  "scripts/05_visualise_trends.R"
 )
 
 for (script in scripts) {

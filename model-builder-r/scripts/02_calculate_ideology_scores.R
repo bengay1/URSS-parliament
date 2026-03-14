@@ -105,4 +105,4 @@ readr::write_csv(score_summary, "data/score_summary.csv")
 cat("✓ Saved: data/score_summary.csv\n")
 
 cat("✓ STEP 2 COMPLETE\n")
-cat("  Next: Run scripts/03_analyse_ideology_change.R\n")
+cat("  Next: Run scripts/03_initial_eda.R\n")

@@ -29,8 +29,9 @@
 - ✅ Variables use snake_case: `mp_name_id`, `z_score`, `party_clean`
 - ✅ Files use lowercase with underscores (no spaces):
   - Old: "Actual Script used for plotting (1997 - 2025).R" → New: scripts/02_calculate_ideology_scores.R
-  - Old: "Running regression.R" → New: scripts/03_analyse_ideology_change.R
-  - Old: "Party plot over time.R" → New: scripts/04_visualise_trends.R
+  - Old: "Altered URSS chunks.R" → New: scripts/03_initial_eda.R
+  - Old: "Running regression.R" → New: scripts/04_analyse_ideology_change.R
+  - Old: "Party plot over time.R" → New: scripts/05_visualise_trends.R
 
 ### 4. **Modularity & Reusability**
 - ✅ Functions separated into `functions/` directory:
@@ -257,8 +258,9 @@ model-builder-r/
 │   ├── 00_setup.R                      # Setup & load libraries
 │   ├── 01_load_election_data.R         # Download & prepare data
 │   ├── 02_calculate_ideology_scores.R  # Fit IRT models
-│   ├── 03_analyse_ideology_change.R    # Regression analysis
-│   └── 04_visualise_trends.R           # Create visualisations
+│   ├── 03_initial_eda.R        # Exploratory & custom analysis
+│   ├── 04_analyse_ideology_change.R    # Regression analysis
+│   └── 05_visualise_trends.R           # Create visualisations
 ├── functions/                          # Reusable helper functions
 │   ├── load_functions.R                # Data loading utilities
 │   ├── irt_functions.R                 # IRT & regression functions

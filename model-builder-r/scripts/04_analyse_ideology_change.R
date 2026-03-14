@@ -24,7 +24,7 @@
 
 source("scripts/00_setup.R")
 
-cat("STEP 3: ANALYSE IDEOLOGICAL CHANGE\n")
+cat("STEP 4: ANALYSE IDEOLOGICAL CHANGE\n")
 
 # ============================================================================
 # 1. Load scores
@@ -180,7 +180,7 @@ p_changers <- ggplot(top_changers,
 ggsave("data/top_changing_mps.png", p_changers, width = 12, height = 10, dpi = 300)
 cat("✓ Saved: data/top_changing_mps.png\n")
 
-cat("✓ STEP 3 COMPLETE\n")
+cat("✓ STEP 4 COMPLETE\n")
 cat("  Review: data/mp_slopes_15years.csv\n")
-cat("  Next: Run scripts/04_visualise_trends.R\n")
+cat("  Next: Run scripts/05_visualise_trends.R\n")
 

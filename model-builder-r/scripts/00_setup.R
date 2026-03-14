@@ -13,7 +13,7 @@
 # ============================================================================
 
 # Install missing packages (uncomment if needed)
-# required_packages <- c("tidyverse", "ltm", "lubridate", "dplyr", "ggplot2", "knitr")
+# required_packages <- c("lubridate", "dplyr", "ggplot2", "knitr")
 # for (pkg in required_packages) {
 #   if (!require(pkg, character.only = TRUE)) {
 #     install.packages(pkg)

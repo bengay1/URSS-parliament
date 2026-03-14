@@ -21,8 +21,9 @@ This collection of R scripts analyses voting data from the UK Parliament using I
 source("scripts/00_setup.R")          # Load libraries & functions
 source("scripts/01_load_election_data.R")  # Download & prepare data
 source("scripts/02_calculate_ideology_scores.R")  # Calculate IRT scores
-source("scripts/03_analyse_ideology_change.R")    # Identify trends
-source("scripts/04_visualise_trends.R")           # Create visualisations
+source("scripts/03_initial_eda.R")         # Exploratory & custom analysis
+source("scripts/04_analyse_ideology_change.R")    # Identify trends
+source("scripts/05_visualise_trends.R")           # Create visualisations
 ```
 
 See **QUICK_START.md** for detailed instructions.
@@ -152,14 +153,21 @@ Where:
   │  └─ Extract factor scores (θ)
   └─ Output: all_scores.csv
 
-03_analyse_ideology_change.R
+03_initial_eda.R
+  ├─ Agreement rate analysis between MPs
+  ├─ Year-on-year stability analysis
+  ├─ Custom MP group trends
+  ├─ ICC (Item Characteristic Curve) plots
+  └─ MP ideology score distributions
+
+04_analyse_ideology_change.R
   ├─ For each MP with 5+ years data:
   │  ├─ Fit linear regression: z_score ~ year
   │  ├─ Extract slope (annual change), p-value, significance
   │  └─ Identify significant shifters
   └─ Output: mp_slopes_5years.csv
 
-04_visualise_trends.R
+05_visualise_trends.R
   ├─ Party-level trends (Conservative, Labour, Lib Dem)
   ├─ Individual MP trajectories
   ├─ Score distributions by year
@@ -187,8 +195,9 @@ model-builder-r/
 │   ├── 00_setup.R                      # Load libraries & functions
 │   ├── 01_load_election_data.R         # Download & prepare data
 │   ├── 02_calculate_ideology_scores.R  # Fit IRT models
-│   ├── 03_analyse_ideology_change.R    # Regression analysis
-│   └── 04_visualise_trends.R           # Create visualisations
+│   ├── 03_initial_eda.R        # Exploratory & custom analysis
+│   ├── 04_analyse_ideology_change.R    # Regression analysis
+│   └── 05_visualise_trends.R           # Create visualisations
 ├── functions/
 │   ├── load_functions.R                # Data loading helpers
 │   ├── irt_functions.R                 # IRT & regression functions
@@ -220,7 +229,6 @@ model-builder-r/
 
 If using this analysis, please cite:
 - Public Whip data source: https://www.publicwhip.org.uk/
-- IRT methodology: Battari et al. (2015) DW-NOMINATE or standard IRT references
 
 ## Licence
 

@@ -20,7 +20,7 @@
 
 source("scripts/00_setup.R")
 
-cat("STEP 4: VISUALISE TRENDS\n")
+cat("STEP 5: VISUALISE TRENDS\n")
 
 # ============================================================================
 # 1. Load data
@@ -217,7 +217,7 @@ cat("✓ Saved: data/yearly_statistics.csv\n")
 # Summary
 # ============================================================================
 
-cat("✓ STEP 4 COMPLETE\n")
+cat("✓ STEP 5 COMPLETE\n")
 cat("\nGenerated visualisations:\n")
 cat("  • data/party_ideology_trends.png\n")
 cat("  • data/selected_mp_trends.png\n")

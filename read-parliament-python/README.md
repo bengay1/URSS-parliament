@@ -61,8 +61,8 @@ ignore 0
 ...
 ignore 18
 mpid	firstname	surname	party	PublicWhip URL
-8	Theresa	 May	Con	http://martingay.co.uk
-14	John	 Redwood	Con	http://martingay.co.uk
+8	Theresa	 May	Con	-
+14	John	 Redwood	Con	-
 ```
 
 ---
@@ -209,7 +209,6 @@ Ensure output directory is writable. Check console output for errors.
 ## License & Attribution
 
 Parliament data sourced from UK Parliament Commons Votes API (public data).
-Python port from original C# implementation.
 
 ---
 
@@ -229,6 +228,3 @@ Extend `DataProcessor` in `data_processor.py` for custom analysis or filtering.
 
 ---
 
-## Contact
-
-For issues or improvements, refer to the C# original project documentation.
